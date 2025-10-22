@@ -1,4 +1,5 @@
 import 'package:ebaapp/pages/login_page.dart';
+import 'package:ebaapp/pages/menu_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -20,11 +21,10 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Eba app',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
+      theme: ThemeData(primarySwatch: Colors.blue),
       routes: {
-        '/': (context) => LoginPage(),
+        '/': (context) => const LoginPage(),
+        '/menu': (context) => const MenuPage(),
       },
       initialRoute: '/',
     );

@@ -37,6 +37,14 @@ class DatabaseHelper {
       )
     ''');
 
+    await db.execute('''
+      CREATE TABLE users_login (
+        id INTEGER,
+        name TEXT,
+        username TEXT
+      )
+    ''');
+
     // PRODUCTORES (solo campos mínimos)
     await db.execute('''
       CREATE TABLE productores (
@@ -60,6 +68,116 @@ class DatabaseHelper {
 
     // índices útiles
     await db.execute('CREATE INDEX IF NOT EXISTS idx_apiarios_productor ON apiarios(productor_id)');
+  }
+  /// Borra users_login e inserta el usuario cuyo username coincida en users.
+  /// Retorna el mapa del usuario guardado en users_login.
+  Future<Map<String, dynamic>> loginWithUsername(String username) async {
+    final db = await database;
+
+    // Busca el usuario en tabla users (importada del servidor)
+    final found = await db.query(
+      'users',
+      where: 'username = ?',
+      whereArgs: [username],
+      limit: 1,
+    );
+
+    if (found.isEmpty) {
+      throw Exception('Usuario no encontrado en "users". Importa datos o verifica el username.');
+    }
+
+    final user = found.first;
+
+    // Persistir sesión simple en users_login (1 fila)
+    await db.transaction((txn) async {
+      await txn.delete('users_login'); // mantiene solo 1 "sesión"
+      await txn.insert('users_login', {
+        'id': user['id'],
+        'name': user['name'],
+        'username': user['username'],
+      });
+    });
+
+    return user;
+  }
+
+  /// Retorna el usuario actualmente logueado (si existe) desde users_login.
+  Future<Map<String, dynamic>?> currentUser() async {
+    final db = await database;
+    final rows = await db.query('users_login', limit: 1);
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// Cuenta productores (con filtro opcional).
+  Future<int> countProductores({String search = ''}) async {
+    final db = await database;
+
+    if (search.trim().isEmpty) {
+      final res = await db.rawQuery('SELECT COUNT(*) as c FROM productores');
+      return Sqflite.firstIntValue(res) ?? 0;
+    }
+
+    final like = '%${search.trim()}%';
+    final res = await db.rawQuery('''
+      SELECT COUNT(*) as c
+      FROM productores
+      WHERE UPPER(nombre) LIKE UPPER(?)
+         OR UPPER(apellidos) LIKE UPPER(?)
+    ''', [like, like]);
+
+    return Sqflite.firstIntValue(res) ?? 0;
+  }
+
+  /// Lista productores paginados con un conteo de apiarios (subquery), con filtro opcional.
+  Future<List<Map<String, dynamic>>> fetchProductores({
+    String search = '',
+    int limit = 50,
+    int offset = 0,
+    String orderBy = 'id DESC',
+  }) async {
+    final db = await database;
+
+    final baseSelect = '''
+      SELECT
+        p.id,
+        p.nombre,
+        p.apellidos,
+        (
+          SELECT COUNT(1)
+          FROM apiarios a
+          WHERE a.productor_id = p.id
+        ) AS apiarios_count
+      FROM productores p
+    ''';
+
+    if (search.trim().isEmpty) {
+      return db.rawQuery('''
+        $baseSelect
+        ORDER BY $orderBy
+        LIMIT ? OFFSET ?
+      ''', [limit, offset]);
+    } else {
+      final like = '%${search.trim()}%';
+      return db.rawQuery('''
+        $baseSelect
+        WHERE UPPER(p.nombre) LIKE UPPER(?)
+           OR UPPER(p.apellidos) LIKE UPPER(?)
+        ORDER BY $orderBy
+        LIMIT ? OFFSET ?
+      ''', [like, like, limit, offset]);
+    }
+  }
+
+  /// Apiarios por productor (se cargan al expandir). Si tienes MUCHÍSIMOS apiarios por productor,
+  /// puedes añadir paginación aquí también.
+  Future<List<Map<String, dynamic>>> fetchApiariosByProductor(int productorId) async {
+    final db = await database;
+    return db.query(
+      'apiarios',
+      where: 'productor_id = ?',
+      whereArgs: [productorId],
+      orderBy: 'id DESC',
+    );
   }
 
   // ---------------------------------------------------------------------------
