@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:ebaapp/services/database_helper.dart';
 import 'package:flutter/material.dart';
+import 'mapa_page.dart';
 
 class MenuPage extends StatefulWidget {
   const MenuPage({super.key});
@@ -11,6 +12,7 @@ class MenuPage extends StatefulWidget {
 
 class _MenuPageState extends State<MenuPage> {
   final _searchCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
   Timer? _debounce;
 
   bool _loading = true;
@@ -33,6 +35,7 @@ class _MenuPageState extends State<MenuPage> {
     _searchCtrl.removeListener(_onSearchChanged);
     _searchCtrl.dispose();
     _debounce?.cancel();
+    _scrollCtrl.dispose();
     super.dispose();
   }
 
@@ -81,40 +84,88 @@ class _MenuPageState extends State<MenuPage> {
       _apiariosCache[productorId] = apiarios;
       if (mounted) setState(() {}); // refresca expansión
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error apiarios: $e')));
     }
   }
-  // logout
-  Function()? logout() {
-    // return () async {
-    //   await DatabaseHelper().logout();
-    //   if (!mounted) return;
-    //   Navigator.pushReplacementNamed(context, '/login');
-    // };
-    // confirm
-    return () {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Confirmar salida'),
-          content: const Text('¿Estás seguro de que deseas salir?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () async {
-                await DatabaseHelper().logout();
-                if (!mounted) return;
-                Navigator.pushReplacementNamed(context, '/login');
-              },
-              child: const Text('Salir'),
-            ),
-          ],
+
+  Future<void> _goToMapForProducer(Map<String, dynamic> p) async {
+    final pid = p['id'] as int;
+    final title = '${p['nombre'] ?? ''} ${p['apellidos'] ?? ''}'.trim().isEmpty
+        ? 'Productor $pid'
+        : '${p['nombre'] ?? ''} ${p['apellidos'] ?? ''}'.trim();
+
+    // Asegurar apiarios cargados
+    if (!_apiariosCache.containsKey(pid)) {
+      await _loadApiariosFor(pid);
+    }
+    final aps = _apiariosCache[pid] ?? [];
+
+    // Mapear a marcadores
+    final markers = aps.map((a) {
+      return {
+        'lat': a['latitud']?.toString(),
+        'lng': a['longitud']?.toString(),
+        'title': a['lugar_apiario'] ?? '(Sin lugar)',
+        'subtitle': 'Apiario ID: ${a['id'] ?? ''}',
+      };
+    }).toList();
+
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MapaPage(
+          title: 'Apiarios de $title',
+          markers: markers,
         ),
-      );
-    };
+      ),
+    );
+  }
+
+  void _goToMapForSingleApiario(Map<String, dynamic> a) {
+    final markers = [
+      {
+        'lat': a['latitud']?.toString(),
+        'lng': a['longitud']?.toString(),
+        'title': a['lugar_apiario'] ?? '(Sin lugar)',
+        'subtitle': 'Apiario ID: ${a['id'] ?? ''}',
+      }
+    ];
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MapaPage(
+          title: a['lugar_apiario'] ?? 'Apiario',
+          markers: markers,
+        ),
+      ),
+    );
+  }
+
+  void _confirmLogout() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar salida'),
+        content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await DatabaseHelper().logout(); // asegúrate de tener este método
+              if (!mounted) return;
+              Navigator.of(context).pop();
+              Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
+            },
+            child: const Text('Salir'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -129,160 +180,227 @@ class _MenuPageState extends State<MenuPage> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loading ? null : _loadPage,
+            tooltip: 'Refrescar',
           ),
-          // salir
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: logout(),
+            onPressed: _confirmLogout,
+            tooltip: 'Salir',
           ),
         ],
         foregroundColor: Colors.white,
         backgroundColor: Colors.blueAccent,
       ),
-      body: Column(
-        children: [
-          // Filtros
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Buscar productor (nombre/apellidos)',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.search),
+
+      body: RefreshIndicator(
+        onRefresh: _loadPage,
+        child: ListView(
+          controller: _scrollCtrl,
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          children: [
+            // Buscador + tamaño de página
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchCtrl,
+                        decoration: InputDecoration(
+                          hintText: 'Buscar productor (nombre/apellidos)',
+                          prefixIcon: const Icon(Icons.search),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          isDense: true,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                DropdownButton<int>(
-                  value: _pageSize,
-                  items: const [
-                    DropdownMenuItem(value: 25, child: Text('25')),
-                    DropdownMenuItem(value: 50, child: Text('50')),
-                    DropdownMenuItem(value: 100, child: Text('100')),
+                    const SizedBox(width: 10),
+                    PopupMenuButton<int>(
+                      tooltip: 'Tamaño de página',
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(value: 25, child: Text('25 por página')),
+                        PopupMenuItem(value: 50, child: Text('50 por página')),
+                        PopupMenuItem(value: 100, child: Text('100 por página')),
+                      ],
+                      onSelected: (v) {
+                        setState(() {
+                          _pageSize = v;
+                          _page = 1;
+                        });
+                        _loadPage();
+                      },
+                      child: Chip(
+                        label: Text('$_pageSize'),
+                        avatar: const Icon(Icons.list_alt, size: 18),
+                      ),
+                    ),
                   ],
-                  onChanged: (v) {
-                    if (v == null) return;
-                    setState(() {
-                      _pageSize = v;
-                      _page = 1;
-                    });
-                    _loadPage();
-                  },
                 ),
-              ],
+              ),
             ),
-          ),
 
-          // Info de paginación
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text('Mostrando $showingStart–$showingEnd de $_total'),
+            // Info de paginación
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
+              child: Text(
+                'Mostrando $showingStart–$showingEnd de $_total',
+                style: TextStyle(color: Colors.grey.shade700),
+              ),
             ),
-          ),
 
-          const SizedBox(height: 6),
-
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _productores.isEmpty
-                ? const Center(child: Text('Sin resultados'))
-                : ListView.builder(
-              itemCount: _productores.length,
-              itemBuilder: (context, index) {
-                final p = _productores[index];
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 60),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_productores.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 60),
+                child: Column(
+                  children: [
+                    Icon(Icons.inbox_outlined, size: 48, color: Colors.grey.shade500),
+                    const SizedBox(height: 10),
+                    Text('Sin resultados', style: TextStyle(color: Colors.grey.shade600)),
+                  ],
+                ),
+              )
+            else
+              ..._productores.map((p) {
                 final pid = p['id'] as int;
-                final title = '${p['nombre'] ?? ''} ${p['apellidos'] ?? ''}'.trim();
+                final nombre = (p['nombre'] ?? '').toString();
+                final apellidos = (p['apellidos'] ?? '').toString();
+                final title = '$nombre $apellidos'.trim().isEmpty ? '(Sin nombre)' : '$nombre $apellidos'.trim();
                 final count = p['apiarios_count'] ?? 0;
 
-                return ExpansionTile(
-                  title: Text(title.isEmpty ? '(Sin nombre)' : title),
-                  subtitle: Text('ID: $pid · Apiarios: $count'),
-                  onExpansionChanged: (isOpen) {
-                    if (isOpen) _loadApiariosFor(pid);
-                  },
-                  children: [
-                    if (!_apiariosCache.containsKey(pid))
-                      const Padding(
-                        padding: EdgeInsets.all(12.0),
-                        child: LinearProgressIndicator(),
-                      )
-                    else
-                      ..._apiariosCache[pid]!.map((a) {
-                        final lat = a['latitud'] ?? '';
-                        final lng = a['longitud'] ?? '';
-                        final lugar = a['lugar_apiario'] ?? '';
-                        final aid = a['id'] ?? '';
-                        return ListTile(
-                          dense: true,
-                          title: Text(lugar.isEmpty ? '(Sin lugar)' : lugar),
-                          subtitle: Text('Apiario ID: $aid · Lat: $lat · Lng: $lng'),
-                          leading: const Icon(Icons.hive_outlined),
-                        );
-                      }).toList(),
-                  ],
-                );
-              },
-            ),
-          ),
+                final initials = [
+                  if (nombre.isNotEmpty) nombre.trim()[0].toUpperCase(),
+                  if (apellidos.isNotEmpty) apellidos.trim()[0].toUpperCase(),
+                ].join();
 
-          // Controles de paginación
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Página $_page de $_totalPages'),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.first_page),
-                      onPressed: (_page > 1 && !_loading)
-                          ? () {
-                        setState(() => _page = 1);
-                        _loadPage();
-                      }
-                          : null,
+                return Card(
+                  elevation: 2,
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                      leading: CircleAvatar(
+                        child: Text(initials.isEmpty ? '?' : initials),
+                      ),
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => _goToMapForProducer(p),
+                              child: Text(
+                                title,
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Chip(
+                            label: Text('Apiarios: $count'),
+                            avatar: const Icon(Icons.hive_outlined, size: 18),
+                          ),
+                        ],
+                      ),
+                      subtitle: Text('ID: $pid'),
+                      onExpansionChanged: (isOpen) {
+                        if (isOpen) _loadApiariosFor(pid);
+                      },
+                      children: [
+                        if (!_apiariosCache.containsKey(pid))
+                          const Padding(
+                            padding: EdgeInsets.all(12.0),
+                            child: LinearProgressIndicator(),
+                          )
+                        else
+                          ..._apiariosCache[pid]!.map((a) {
+                            final lat = a['latitud'] ?? '';
+                            final lng = a['longitud'] ?? '';
+                            final lugar = a['lugar_apiario'] ?? '';
+                            final aid = a['id'] ?? '';
+
+                            return ListTile(
+                              leading: const Icon(Icons.place_outlined),
+                              dense: true,
+                              title: Text(lugar.isEmpty ? '(Sin lugar)' : lugar),
+                              subtitle: Text('Apiario ID: $aid · Lat: $lat · Lng: $lng'),
+                              trailing: TextButton.icon(
+                                onPressed: () => _goToMapForSingleApiario(a),
+                                icon: const Icon(Icons.map_outlined, size: 18),
+                                label: const Text('Ver en mapa'),
+                              ),
+                              onTap: () => _goToMapForSingleApiario(a),
+                            );
+                          }).toList(),
+                        // Botón ver todos en mapa
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 6, right: 6),
+                            child: OutlinedButton.icon(
+                              onPressed: () => _goToMapForProducer(p),
+                              icon: const Icon(Icons.travel_explore_outlined),
+                              label: const Text('Ver todos en mapa'),
+                            ),
+                          ),
+                        )
+                      ],
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.chevron_left),
-                      onPressed: (_page > 1 && !_loading)
-                          ? () {
-                        setState(() => _page -= 1);
-                        _loadPage();
-                      }
-                          : null,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.chevron_right),
-                      onPressed: (_page < _totalPages && !_loading)
-                          ? () {
-                        setState(() => _page += 1);
-                        _loadPage();
-                      }
-                          : null,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.last_page),
-                      onPressed: (_page < _totalPages && !_loading)
-                          ? () {
-                        setState(() => _page = _totalPages);
-                        _loadPage();
-                      }
-                          : null,
-                    ),
-                  ],
-                ),
-              ],
+                  ),
+                );
+              }),
+
+            // Paginación
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Página $_page de $_totalPages'),
+                  Wrap(
+                    spacing: 6,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.first_page),
+                        onPressed: (_page > 1 && !_loading)
+                            ? () { setState(() => _page = 1); _loadPage(); }
+                            : null,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left),
+                        onPressed: (_page > 1 && !_loading)
+                            ? () { setState(() => _page -= 1); _loadPage(); }
+                            : null,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right),
+                        onPressed: (_page < _totalPages && !_loading)
+                            ? () { setState(() => _page += 1); _loadPage(); }
+                            : null,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.last_page),
+                        onPressed: (_page < _totalPages && !_loading)
+                            ? () { setState(() => _page = _totalPages); _loadPage(); }
+                            : null,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

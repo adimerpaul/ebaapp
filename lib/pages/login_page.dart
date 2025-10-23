@@ -11,19 +11,21 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _usernameCtrl = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
   bool _loading = false;
   bool _importing = false;
 
+  @override
+  void dispose() {
+    _usernameCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _doLogin() async {
+    FocusScope.of(context).unfocus();
+    if (!_formKey.currentState!.validate()) return;
+
     final username = _usernameCtrl.text.trim();
-    if (username.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresa tu username')),
-      );
-
-      return;
-    }
-
     setState(() => _loading = true);
     try {
       final user = await DatabaseHelper().loginWithUsername(username);
@@ -43,12 +45,17 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _importar() async {
+    FocusScope.of(context).unfocus();
     setState(() => _importing = true);
     try {
       final result = await DatabaseHelper().importFromServer();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Importación OK: users ${result.users}, productores ${result.productores}, apiarios ${result.apiarios}')),
+        SnackBar(
+          content: Text(
+            'Importación OK: users ${result.users}, productores ${result.productores}, apiarios ${result.apiarios}',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -65,64 +72,206 @@ class _LoginPageState extends State<LoginPage> {
     final apiUrl = dotenv.env['API_URL'] ?? '(sin API_URL)';
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Login'),
-        backgroundColor: Colors.blueAccent,
-        foregroundColor: Colors.white,
-      ),
-      body: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: ListView(
-              children: [
-                const SizedBox(height: 32),
-                const Text('Ingresa tu username (local)', style: TextStyle(fontSize: 16)),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _usernameCtrl,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Username',
-                  ),
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => _doLogin(),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _loading ? null : _doLogin,
-                    icon: _loading
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.login),
-                    label: Text(_loading ? 'Ingresando...' : 'Ingresar'),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                const Divider(),
-                const SizedBox(height: 8),
-                Text('API: $apiUrl', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-              ],
-            ),
+      // Fondo con gradiente
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment(-0.9, -1.0),
+            end: Alignment(1.0, 0.8),
+            colors: [
+              Color(0xFF1E3C72), // azul profundo
+              Color(0xFF2A5298), // azul intermedio
+              Color(0xFF5DA7FF), // acento claro
+            ],
           ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: SafeArea(
-              minimum: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _importing ? null : _importar,
-                  icon: _importing
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.download),
-                  label: Text(_importing ? 'Importando…' : 'Importar datos'),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Logo
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Image.asset(
+                        'assets/logo.png',
+                        height: 86,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Título y subtítulo
+                    Text(
+                      'EBA App',
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.2,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Accede para gestionar Productores y Apiarios',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withOpacity(0.9),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Tarjeta del formulario
+                    Card(
+                      elevation: 10,
+                      shadowColor: Colors.black26,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 22, 20, 14),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            children: [
+                              // Campo username
+                              TextFormField(
+                                controller: _usernameCtrl,
+                                textInputAction: TextInputAction.done,
+                                onFieldSubmitted: (_) => _doLogin(),
+                                decoration: InputDecoration(
+                                  labelText: 'Usuario',
+                                  hintText: 'Ej: jdiaz',
+                                  prefixIcon: const Icon(Icons.person_outline),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                validator: (v) {
+                                  if (v == null || v.trim().isEmpty) {
+                                    return 'Ingresa tu username';
+                                  }
+                                  if (v.trim().length < 3) {
+                                    return 'Mínimo 3 caracteres';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 14),
+
+                              // Botón ingresar
+                              SizedBox(
+                                width: double.infinity,
+                                height: 48,
+                                child: ElevatedButton(
+                                  onPressed: _loading ? null : _doLogin,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF2A5298),
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  child: _loading
+                                      ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                      : const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.login_rounded),
+                                      SizedBox(width: 8),
+                                      Text('Ingresar'),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(height: 10),
+                              // Línea divisoria suave
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Container(height: 1, color: Colors.grey.shade200),
+                                  ),
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 10),
+                                    child: Text('o', style: TextStyle(color: Colors.grey)),
+                                  ),
+                                  Expanded(
+                                    child: Container(height: 1, color: Colors.grey.shade200),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+
+                              // Botón importar
+                              SizedBox(
+                                width: double.infinity,
+                                height: 46,
+                                child: OutlinedButton.icon(
+                                  onPressed: _importing ? null : _importar,
+                                  icon: _importing
+                                      ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                      : const Icon(Icons.cloud_download_outlined),
+                                  label: Text(_importing ? 'Importando…' : 'Importar datos'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF2A5298),
+                                    side: BorderSide(color: Colors.blue.shade200),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // Pie con info de API
+                    Text(
+                      'API: $apiUrl',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.85),
+                        fontSize: 12,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+
+                    const SizedBox(height: 8),
+                    Text(
+                      '© ${DateTime.now().year} — EBA',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.75),
+                        fontSize: 12,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
