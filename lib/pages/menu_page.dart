@@ -84,6 +84,38 @@ class _MenuPageState extends State<MenuPage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error apiarios: $e')));
     }
   }
+  // logout
+  Function()? logout() {
+    // return () async {
+    //   await DatabaseHelper().logout();
+    //   if (!mounted) return;
+    //   Navigator.pushReplacementNamed(context, '/login');
+    // };
+    // confirm
+    return () {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Confirmar salida'),
+          content: const Text('¿Estás seguro de que deseas salir?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () async {
+                await DatabaseHelper().logout();
+                if (!mounted) return;
+                Navigator.pushReplacementNamed(context, '/login');
+              },
+              child: const Text('Salir'),
+            ),
+          ],
+        ),
+      );
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +129,12 @@ class _MenuPageState extends State<MenuPage> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loading ? null : _loadPage,
-          )
+          ),
+          // salir
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: logout(),
+          ),
         ],
         foregroundColor: Colors.white,
         backgroundColor: Colors.blueAccent,

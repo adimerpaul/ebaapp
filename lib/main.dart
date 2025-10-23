@@ -1,5 +1,6 @@
 import 'package:ebaapp/pages/login_page.dart';
 import 'package:ebaapp/pages/menu_page.dart';
+import 'package:ebaapp/services/database_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -23,10 +24,48 @@ class _MyAppState extends State<MyApp> {
       title: 'Eba app',
       theme: ThemeData(primarySwatch: Colors.blue),
       routes: {
-        '/': (context) => const LoginPage(),
+        // '/': (context) => const LoginPage(),
+        '/': (context) => const VerifiPage(),
         '/menu': (context) => const MenuPage(),
+        '/login': (context) => const LoginPage(),
       },
       initialRoute: '/',
     );
   }
 }
+
+class VerifiPage extends StatefulWidget {
+  const VerifiPage({super.key});
+
+  @override
+  State<VerifiPage> createState() => _VerifiPageState();
+}
+
+class _VerifiPageState extends State<VerifiPage> {
+  @override
+  void initState() {
+    super.initState();
+    verificarLogin();
+  }
+  Future<void> verificarLogin() async {
+    final user = await DatabaseHelper().currentUser();
+    print('user en verifi: $user');
+    if (user != null) {
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/menu');
+    } else {
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/login');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+  }
+}
+

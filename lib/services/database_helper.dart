@@ -69,6 +69,10 @@ class DatabaseHelper {
     // índices útiles
     await db.execute('CREATE INDEX IF NOT EXISTS idx_apiarios_productor ON apiarios(productor_id)');
   }
+  Future logout() async {
+    final db = await database;
+    await db.delete('users_login');
+  }
   /// Borra users_login e inserta el usuario cuyo username coincida en users.
   /// Retorna el mapa del usuario guardado en users_login.
   Future<Map<String, dynamic>> loginWithUsername(String username) async {
