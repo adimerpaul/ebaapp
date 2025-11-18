@@ -1,5 +1,6 @@
 import 'package:ebaapp/pages/login_page.dart';
 import 'package:ebaapp/pages/menu_page.dart';
+import 'package:ebaapp/pages/register_page.dart';
 import 'package:ebaapp/services/database_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -28,6 +29,7 @@ class _MyAppState extends State<MyApp> {
         '/': (context) => const VerifiPage(),
         '/menu': (context) => const MenuPage(),
         '/login': (context) => const LoginPage(),
+        '/register': (context) => const RegisterPage()
       },
       initialRoute: '/',
     );

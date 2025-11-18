@@ -10,14 +10,14 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _usernameCtrl = TextEditingController();
+  final _carnetCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
   bool _importing = false;
 
   @override
   void dispose() {
-    _usernameCtrl.dispose();
+    _carnetCtrl.dispose();
     super.dispose();
   }
 
@@ -25,13 +25,13 @@ class _LoginPageState extends State<LoginPage> {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
 
-    final username = _usernameCtrl.text.trim();
+    final carnet = _carnetCtrl.text.trim();
     setState(() => _loading = true);
     try {
-      final user = await DatabaseHelper().loginWithUsername(username);
+      final apicultor = await DatabaseHelper().loginApicultorByCarnet(carnet);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Bienvenido, ${user['name']}')),
+        SnackBar(content: Text('Bienvenido, ${apicultor['name']}')),
       );
       Navigator.pushReplacementNamed(context, '/menu');
     } catch (e) {
@@ -72,16 +72,15 @@ class _LoginPageState extends State<LoginPage> {
     final apiUrl = dotenv.env['API_URL'] ?? '(sin API_URL)';
 
     return Scaffold(
-      // Fondo con gradiente
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment(-0.9, -1.0),
             end: Alignment(1.0, 0.8),
             colors: [
-              Color(0xFF1E3C72), // azul profundo
-              Color(0xFF2A5298), // azul intermedio
-              Color(0xFF5DA7FF), // acento claro
+              Color(0xFF1E3C72),
+              Color(0xFF2A5298),
+              Color(0xFF5DA7FF),
             ],
           ),
         ),
@@ -109,7 +108,6 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 18),
 
-                    // Título y subtítulo
                     Text(
                       'EBA App',
                       style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -121,7 +119,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Accede para gestionar Productores y Apiarios',
+                      'Accede como apicultor usando tu carnet',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Colors.white.withOpacity(0.9),
                       ),
@@ -129,7 +127,6 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 18),
 
-                    // Tarjeta del formulario
                     Card(
                       elevation: 10,
                       shadowColor: Colors.black26,
@@ -142,25 +139,26 @@ class _LoginPageState extends State<LoginPage> {
                           key: _formKey,
                           child: Column(
                             children: [
-                              // Campo username
+                              // Campo carnet
                               TextFormField(
-                                controller: _usernameCtrl,
+                                controller: _carnetCtrl,
                                 textInputAction: TextInputAction.done,
+                                keyboardType: TextInputType.number,
                                 onFieldSubmitted: (_) => _doLogin(),
                                 decoration: InputDecoration(
-                                  labelText: 'Usuario',
-                                  hintText: 'Ej: jdiaz',
-                                  prefixIcon: const Icon(Icons.person_outline),
+                                  labelText: 'Carnet de identidad',
+                                  hintText: 'Ej: 12345678',
+                                  prefixIcon: const Icon(Icons.badge_outlined),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(14),
                                   ),
                                 ),
                                 validator: (v) {
                                   if (v == null || v.trim().isEmpty) {
-                                    return 'Ingresa tu username';
+                                    return 'Ingresa tu carnet';
                                   }
-                                  if (v.trim().length < 3) {
-                                    return 'Mínimo 3 caracteres';
+                                  if (v.trim().length < 4) {
+                                    return 'Carnet demasiado corto';
                                   }
                                   return null;
                                 },
@@ -197,9 +195,37 @@ class _LoginPageState extends State<LoginPage> {
                                   ),
                                 ),
                               ),
+                              const SizedBox(height: 8),
+
+                              // Botón registrar apicultor
+                              SizedBox(
+                                width: double.infinity,
+                                height: 48,
+                                child: ElevatedButton(
+                                  onPressed: () {
+                                    Navigator.pushNamed(context, '/register');
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: const Color(0xFF2A5298),
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.app_registration),
+                                      SizedBox(width: 8),
+                                      Text('Registrar apicultor'),
+                                    ],
+                                  ),
+                                ),
+                              ),
 
                               const SizedBox(height: 10),
-                              // Línea divisoria suave
+
                               Row(
                                 children: [
                                   Expanded(
@@ -247,7 +273,6 @@ class _LoginPageState extends State<LoginPage> {
 
                     const SizedBox(height: 14),
 
-                    // Pie con info de API
                     Text(
                       'API: $apiUrl',
                       style: TextStyle(
@@ -256,7 +281,6 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       textAlign: TextAlign.center,
                     ),
-
                     const SizedBox(height: 8),
                     Text(
                       '© ${DateTime.now().year} — EBA',
